@@ -18,11 +18,13 @@ let latestStatus = {
 app.get('/', (req, res) => {
 
     res.send(`
+
     <!DOCTYPE html>
     <html>
+
     <head>
 
-        <title>24/7 YouTube Server</title>
+        <title>24/7 Video Server</title>
 
         <meta http-equiv="refresh" content="5">
 
@@ -89,42 +91,39 @@ app.get('/', (req, res) => {
         </div>
 
     </body>
+
     </html>
+
     `);
 
 });
 
 app.listen(PORT, () => {
 
-    console.log('====================================');
-    console.log(`WEB SERVER RUNNING ON PORT ${PORT}`);
-    console.log('====================================');
+    console.log('WEB SERVER RUNNING ON PORT', PORT);
 
 });
 
 async function startPlayer() {
 
-    while (true) {
+    while(true){
 
         let browser;
 
-        try {
+        try{
 
-            console.log('====================================');
-            console.log('LAUNCHING CHROMIUM');
-            console.log('====================================');
+            console.log('LAUNCHING BROWSER');
 
             browser = await chromium.launch({
 
-                headless: true,
+                headless:true,
 
-                args: [
+                args:[
 
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--autoplay-policy=no-user-gesture-required',
                     '--disable-dev-shm-usage',
-                    '--disable-gpu',
                     '--mute-audio'
 
                 ]
@@ -133,97 +132,73 @@ async function startPlayer() {
 
             const page = await browser.newPage({
 
-                viewport: {
-
-                    width: 1280,
-                    height: 720
-
+                viewport:{
+                    width:1280,
+                    height:720
                 }
 
             });
 
-            page.on('console', msg => {
-
-                console.log('[PAGE]', msg.text());
-
-            });
-
-            const videoURL =
+            const url =
                 `https://www.youtube.com/watch?v=${VIDEO_ID}`;
 
-            console.log('OPENING YOUTUBE VIDEO...');
-            console.log(videoURL);
+            console.log('OPENING YOUTUBE');
 
-            await page.goto(videoURL, {
+            await page.goto(url,{
 
-                waitUntil: 'domcontentloaded',
-                timeout: 0
+                waitUntil:'domcontentloaded',
+                timeout:0
 
             });
 
-            console.log('WAITING FOR PAGE LOAD...');
-            await page.waitForTimeout(8000);
+            console.log('WAITING PAGE');
 
-            console.log('TRYING PLAY BUTTON CLICK...');
+            await page.waitForTimeout(10000);
 
-            try {
+            console.log('WAITING FOR VIDEO ELEMENT');
 
-                await page.click('button[aria-label*="Play"]');
+            await page.waitForFunction(() => {
 
-            } catch (e) {
+                return document.querySelector('video');
 
-                console.log('PLAY BUTTON CLICK FAILED');
+            }, {
 
-            }
+                timeout:60000
 
-            await page.waitForTimeout(3000);
+            });
 
-            console.log('TRYING KEYBOARD PLAY...');
-            await page.keyboard.press('k');
-
-            await page.waitForTimeout(3000);
-
-            console.log('FORCE PLAYING VIDEO...');
+            console.log('VIDEO ELEMENT FOUND');
 
             await page.evaluate(() => {
 
-                const vid = document.querySelector('video');
+                const v = document.querySelector('video');
 
-                if (vid) {
+                if(v){
 
-                    vid.muted = true;
+                    v.muted = true;
 
-                    vid.play()
-                        .then(() => {
-
-                            console.log('VIDEO PLAY STARTED');
-
-                        })
-                        .catch(err => {
-
-                            console.log(err);
-
-                        });
+                    v.play();
 
                 }
 
             });
 
-            console.log('====================================');
-            console.log('24/7 VIDEO LOOP STARTED');
-            console.log('====================================');
+            console.log('PLAY STARTED');
 
-            while (true) {
+            while(true){
 
                 const status = await page.evaluate(() => {
 
-                    const video = document.querySelector('video');
+                    const v = document.querySelector('video');
 
-                    if (!video) {
+                    if(!v){
 
                         return {
 
-                            found:false
+                            running:false,
+                            currentTime:0,
+                            readyState:0,
+                            duration:0
 
                         };
 
@@ -231,11 +206,10 @@ async function startPlayer() {
 
                     return {
 
-                        found:true,
-                        paused:video.paused,
-                        currentTime:video.currentTime,
-                        readyState:video.readyState,
-                        duration:video.duration
+                        running:!v.paused,
+                        currentTime:v.currentTime || 0,
+                        readyState:v.readyState || 0,
+                        duration:v.duration || 0
 
                     };
 
@@ -243,18 +217,16 @@ async function startPlayer() {
 
                 latestStatus = {
 
-                    running: !status.paused,
-                    heartbeat: new Date().toISOString(),
-                    currentTime: status.currentTime,
-                    readyState: status.readyState,
-                    duration: status.duration
+                    running:status.running,
+                    heartbeat:new Date().toISOString(),
+                    currentTime:status.currentTime,
+                    readyState:status.readyState,
+                    duration:status.duration
 
                 };
 
-                console.log('------------------------------------');
                 console.log('HEARTBEAT');
                 console.log(latestStatus);
-                console.log('------------------------------------');
 
                 await page.screenshot({
 
@@ -262,19 +234,17 @@ async function startPlayer() {
 
                 });
 
-                console.log('SCREENSHOT UPDATED');
+                if(!status.running){
 
-                if (status.paused) {
-
-                    console.log('VIDEO PAUSED -> REPLAYING');
+                    console.log('VIDEO PAUSED -> REPLAY');
 
                     await page.evaluate(() => {
 
-                        const vid = document.querySelector('video');
+                        const v = document.querySelector('video');
 
-                        if (vid) {
+                        if(v){
 
-                            vid.play();
+                            v.play();
 
                         }
 
@@ -286,25 +256,24 @@ async function startPlayer() {
 
             }
 
-        } catch (err) {
+        }catch(err){
 
-            console.log('====================================');
-            console.log('ERROR OCCURRED');
+            console.log('ERROR');
             console.log(err.message);
-            console.log('RESTARTING IN 5 SECONDS...');
-            console.log('====================================');
 
-            try {
+            try{
 
-                if (browser) {
+                if(browser){
 
                     await browser.close();
 
                 }
 
-            } catch (e) {}
+            }catch(e){}
 
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            console.log('RESTARTING IN 5 SEC');
+
+            await new Promise(r=>setTimeout(r,5000));
 
         }
 
