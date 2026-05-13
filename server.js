@@ -9,43 +9,89 @@ const VIDEO_ID = 'CZ9BMzm6ccA';
 
 let latestStatus = {
     running: false,
-    lastHeartbeat: null,
-    currentTime: 0
+    heartbeat: '',
+    currentTime: 0,
+    readyState: 0
 };
 
 app.get('/', (req, res) => {
 
     res.send(`
-        <html>
-        <head>
-            <title>24/7 Video Server</title>
-            <style>
-                body{
-                    background:#000;
-                    color:#0f0;
-                    font-family:Arial;
-                    text-align:center;
-                    padding-top:50px;
-                }
-            </style>
-        </head>
-        <body>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>24/7 Video Server</title>
 
-            <h1>24/7 Video Server Active</h1>
+        <style>
 
-            <p>Status: ${latestStatus.running}</p>
-            <p>Heartbeat: ${latestStatus.lastHeartbeat}</p>
-            <p>Current Time: ${latestStatus.currentTime}</p>
+            body{
+                margin:0;
+                background:#000;
+                color:#00ff66;
+                font-family:Arial;
+                text-align:center;
+                padding-top:60px;
+            }
 
-        </body>
-        </html>
+            h1{
+                font-size:40px;
+            }
+
+            .box{
+                margin-top:30px;
+                font-size:22px;
+                line-height:2;
+            }
+
+            .live{
+                width:15px;
+                height:15px;
+                background:#00ff66;
+                border-radius:50%;
+                display:inline-block;
+                animation:pulse 1s infinite;
+                margin-right:10px;
+            }
+
+            @keyframes pulse{
+                0%{transform:scale(1);}
+                50%{transform:scale(1.5);}
+                100%{transform:scale(1);}
+            }
+
+        </style>
+    </head>
+
+    <body>
+
+        <h1>
+            <span class="live"></span>
+            24/7 Video Server Active
+        </h1>
+
+        <div class="box">
+
+            <div>Status: ${latestStatus.running}</div>
+
+            <div>Heartbeat: ${latestStatus.heartbeat}</div>
+
+            <div>Current Time: ${latestStatus.currentTime}</div>
+
+            <div>Ready State: ${latestStatus.readyState}</div>
+
+        </div>
+
+    </body>
+    </html>
     `);
 
 });
 
 app.listen(PORT, () => {
 
-    console.log(`Web server running on port ${PORT}`);
+    console.log('====================================');
+    console.log(`Web Server Running On Port ${PORT}`);
+    console.log('====================================');
 
 });
 
@@ -57,30 +103,87 @@ async function startPlayer() {
 
         try {
 
-            console.log('Launching Chromium...');
+            console.log('Launching Chromium Browser...');
 
             browser = await chromium.launch({
+
                 headless: true,
+
                 args: [
+
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
-                    '--autoplay-policy=no-user-gesture-required'
+                    '--autoplay-policy=no-user-gesture-required',
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--mute-audio'
+
                 ]
+
             });
 
-            const page = await browser.newPage();
+            const page = await browser.newPage({
 
-            const url =
-                `https://www.youtube.com/embed/${VIDEO_ID}?autoplay=1&loop=1&playlist=${VIDEO_ID}&mute=1`;
+                viewport: {
 
-            await page.goto(url, {
+                    width: 1280,
+                    height: 720
 
-                waitUntil: 'networkidle',
+                }
+
+            });
+
+            page.on('console', msg => {
+
+                console.log('[PAGE]', msg.text());
+
+            });
+
+            const videoURL =
+                `https://www.youtube.com/embed/${VIDEO_ID}?autoplay=1&loop=1&playlist=${VIDEO_ID}&controls=1&mute=1`;
+
+            console.log('Opening Video...');
+
+            await page.goto(videoURL, {
+
+                waitUntil: 'domcontentloaded',
                 timeout: 0
 
             });
 
-            console.log('VIDEO RUNNING 24/7');
+            console.log('Waiting For Player...');
+
+            await page.waitForTimeout(5000);
+
+            console.log('Force Starting Playback...');
+
+            await page.evaluate(() => {
+
+                const video = document.querySelector('video');
+
+                if (video) {
+
+                    video.muted = true;
+
+                    video.play()
+                        .then(() => {
+
+                            console.log('Playback Started');
+
+                        })
+                        .catch(err => {
+
+                            console.log(err);
+
+                        });
+
+                }
+
+            });
+
+            console.log('====================================');
+            console.log('VIDEO LOOP STARTED');
+            console.log('====================================');
 
             while (true) {
 
@@ -91,7 +194,9 @@ async function startPlayer() {
                     if (!video) {
 
                         return {
+
                             found: false
+
                         };
 
                     }
@@ -100,7 +205,8 @@ async function startPlayer() {
 
                         found: true,
                         paused: video.paused,
-                        currentTime: video.currentTime
+                        currentTime: video.currentTime,
+                        readyState: video.readyState
 
                     };
 
@@ -109,20 +215,54 @@ async function startPlayer() {
                 latestStatus = {
 
                     running: !status.paused,
-                    lastHeartbeat: new Date().toISOString(),
-                    currentTime: status.currentTime
+                    heartbeat: new Date().toISOString(),
+                    currentTime: status.currentTime,
+                    readyState: status.readyState
 
                 };
 
-                console.log('Heartbeat:', latestStatus);
+                console.log('------------------------------------');
+                console.log('HEARTBEAT');
+                console.log(latestStatus);
+                console.log('------------------------------------');
 
-                await page.waitForTimeout(60000);
+                await page.screenshot({
+
+                    path: 'live-proof.png'
+
+                });
+
+                console.log('Screenshot Updated');
+
+                if (status.paused) {
+
+                    console.log('Playback Paused -> Restarting');
+
+                    await page.evaluate(() => {
+
+                        const video = document.querySelector('video');
+
+                        if (video) {
+
+                            video.play();
+
+                        }
+
+                    });
+
+                }
+
+                await page.waitForTimeout(10000);
 
             }
 
         } catch (err) {
 
-            console.log('Restarting:', err.message);
+            console.log('====================================');
+            console.log('ERROR OCCURRED');
+            console.log(err.message);
+            console.log('Restarting In 5 Seconds...');
+            console.log('====================================');
 
             try {
 
@@ -134,7 +274,7 @@ async function startPlayer() {
 
             } catch (e) {}
 
-            await new Promise(r => setTimeout(r, 5000));
+            await new Promise(resolve => setTimeout(resolve, 5000));
 
         }
 
