@@ -11,7 +11,8 @@ let latestStatus = {
     running: false,
     heartbeat: '',
     currentTime: 0,
-    readyState: 0
+    readyState: 0,
+    duration: 0
 };
 
 app.get('/', (req, res) => {
@@ -20,7 +21,10 @@ app.get('/', (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-        <title>24/7 Video Server</title>
+
+        <title>24/7 YouTube Server</title>
+
+        <meta http-equiv="refresh" content="5">
 
         <style>
 
@@ -60,6 +64,7 @@ app.get('/', (req, res) => {
             }
 
         </style>
+
     </head>
 
     <body>
@@ -79,6 +84,8 @@ app.get('/', (req, res) => {
 
             <div>Ready State: ${latestStatus.readyState}</div>
 
+            <div>Duration: ${latestStatus.duration}</div>
+
         </div>
 
     </body>
@@ -90,7 +97,7 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
 
     console.log('====================================');
-    console.log(`Web Server Running On Port ${PORT}`);
+    console.log(`WEB SERVER RUNNING ON PORT ${PORT}`);
     console.log('====================================');
 
 });
@@ -103,7 +110,9 @@ async function startPlayer() {
 
         try {
 
-            console.log('Launching Chromium Browser...');
+            console.log('====================================');
+            console.log('LAUNCHING CHROMIUM');
+            console.log('====================================');
 
             browser = await chromium.launch({
 
@@ -140,9 +149,10 @@ async function startPlayer() {
             });
 
             const videoURL =
-                `https://www.youtube.com/embed/${VIDEO_ID}?autoplay=1&loop=1&playlist=${VIDEO_ID}&controls=1&mute=1`;
+                `https://www.youtube.com/watch?v=${VIDEO_ID}`;
 
-            console.log('Opening Video...');
+            console.log('OPENING YOUTUBE VIDEO...');
+            console.log(videoURL);
 
             await page.goto(videoURL, {
 
@@ -151,24 +161,42 @@ async function startPlayer() {
 
             });
 
-            console.log('Waiting For Player...');
+            console.log('WAITING FOR PAGE LOAD...');
+            await page.waitForTimeout(8000);
 
-            await page.waitForTimeout(5000);
+            console.log('TRYING PLAY BUTTON CLICK...');
 
-            console.log('Force Starting Playback...');
+            try {
+
+                await page.click('button[aria-label*="Play"]');
+
+            } catch (e) {
+
+                console.log('PLAY BUTTON CLICK FAILED');
+
+            }
+
+            await page.waitForTimeout(3000);
+
+            console.log('TRYING KEYBOARD PLAY...');
+            await page.keyboard.press('k');
+
+            await page.waitForTimeout(3000);
+
+            console.log('FORCE PLAYING VIDEO...');
 
             await page.evaluate(() => {
 
-                const video = document.querySelector('video');
+                const vid = document.querySelector('video');
 
-                if (video) {
+                if (vid) {
 
-                    video.muted = true;
+                    vid.muted = true;
 
-                    video.play()
+                    vid.play()
                         .then(() => {
 
-                            console.log('Playback Started');
+                            console.log('VIDEO PLAY STARTED');
 
                         })
                         .catch(err => {
@@ -182,7 +210,7 @@ async function startPlayer() {
             });
 
             console.log('====================================');
-            console.log('VIDEO LOOP STARTED');
+            console.log('24/7 VIDEO LOOP STARTED');
             console.log('====================================');
 
             while (true) {
@@ -195,7 +223,7 @@ async function startPlayer() {
 
                         return {
 
-                            found: false
+                            found:false
 
                         };
 
@@ -203,10 +231,11 @@ async function startPlayer() {
 
                     return {
 
-                        found: true,
-                        paused: video.paused,
-                        currentTime: video.currentTime,
-                        readyState: video.readyState
+                        found:true,
+                        paused:video.paused,
+                        currentTime:video.currentTime,
+                        readyState:video.readyState,
+                        duration:video.duration
 
                     };
 
@@ -217,7 +246,8 @@ async function startPlayer() {
                     running: !status.paused,
                     heartbeat: new Date().toISOString(),
                     currentTime: status.currentTime,
-                    readyState: status.readyState
+                    readyState: status.readyState,
+                    duration: status.duration
 
                 };
 
@@ -228,23 +258,23 @@ async function startPlayer() {
 
                 await page.screenshot({
 
-                    path: 'live-proof.png'
+                    path:'live-proof.png'
 
                 });
 
-                console.log('Screenshot Updated');
+                console.log('SCREENSHOT UPDATED');
 
                 if (status.paused) {
 
-                    console.log('Playback Paused -> Restarting');
+                    console.log('VIDEO PAUSED -> REPLAYING');
 
                     await page.evaluate(() => {
 
-                        const video = document.querySelector('video');
+                        const vid = document.querySelector('video');
 
-                        if (video) {
+                        if (vid) {
 
-                            video.play();
+                            vid.play();
 
                         }
 
@@ -261,7 +291,7 @@ async function startPlayer() {
             console.log('====================================');
             console.log('ERROR OCCURRED');
             console.log(err.message);
-            console.log('Restarting In 5 Seconds...');
+            console.log('RESTARTING IN 5 SECONDS...');
             console.log('====================================');
 
             try {
