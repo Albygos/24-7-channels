@@ -1,6 +1,53 @@
+const express = require('express');
 const { chromium } = require('playwright');
 
+const app = express();
+
+const PORT = process.env.PORT || 3000;
+
 const VIDEO_ID = 'CZ9BMzm6ccA';
+
+let latestStatus = {
+    running: false,
+    lastHeartbeat: null,
+    currentTime: 0
+};
+
+app.get('/', (req, res) => {
+
+    res.send(`
+        <html>
+        <head>
+            <title>24/7 Video Server</title>
+            <style>
+                body{
+                    background:#000;
+                    color:#0f0;
+                    font-family:Arial;
+                    text-align:center;
+                    padding-top:50px;
+                }
+            </style>
+        </head>
+        <body>
+
+            <h1>24/7 Video Server Active</h1>
+
+            <p>Status: ${latestStatus.running}</p>
+            <p>Heartbeat: ${latestStatus.lastHeartbeat}</p>
+            <p>Current Time: ${latestStatus.currentTime}</p>
+
+        </body>
+        </html>
+    `);
+
+});
+
+app.listen(PORT, () => {
+
+    console.log(`Web server running on port ${PORT}`);
+
+});
 
 async function startPlayer() {
 
@@ -10,53 +57,30 @@ async function startPlayer() {
 
         try {
 
-            console.log('====================================');
-            console.log('Launching Chromium Browser...');
-            console.log('====================================');
+            console.log('Launching Chromium...');
 
             browser = await chromium.launch({
                 headless: true,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
-                    '--autoplay-policy=no-user-gesture-required',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--disable-software-rasterizer'
+                    '--autoplay-policy=no-user-gesture-required'
                 ]
             });
 
-            const page = await browser.newPage({
+            const page = await browser.newPage();
 
-                viewport: {
-                    width: 1280,
-                    height: 720
-                }
+            const url =
+                `https://www.youtube.com/embed/${VIDEO_ID}?autoplay=1&loop=1&playlist=${VIDEO_ID}&mute=1`;
 
-            });
-
-            page.on('console', msg => {
-
-                console.log('[PAGE]', msg.text());
-
-            });
-
-            const videoURL =
-                `https://www.youtube.com/embed/${VIDEO_ID}?autoplay=1&loop=1&playlist=${VIDEO_ID}&mute=1&controls=1`;
-
-            console.log('Opening YouTube Video...');
-            console.log(videoURL);
-
-            await page.goto(videoURL, {
+            await page.goto(url, {
 
                 waitUntil: 'networkidle',
                 timeout: 0
 
             });
 
-            console.log('====================================');
-            console.log('VIDEO IS RUNNING 24/7');
-            console.log('====================================');
+            console.log('VIDEO RUNNING 24/7');
 
             while (true) {
 
@@ -76,49 +100,21 @@ async function startPlayer() {
 
                         found: true,
                         paused: video.paused,
-                        currentTime: video.currentTime,
-                        duration: video.duration
+                        currentTime: video.currentTime
 
                     };
 
                 });
 
-                console.log('------------------------------------');
-                console.log('Heartbeat:', new Date().toISOString());
-                console.log(status);
-                console.log('------------------------------------');
+                latestStatus = {
 
-                if (!status.found) {
+                    running: !status.paused,
+                    lastHeartbeat: new Date().toISOString(),
+                    currentTime: status.currentTime
 
-                    throw new Error('Video element not found');
+                };
 
-                }
-
-                if (status.paused) {
-
-                    console.log('Video paused. Attempting replay...');
-
-                    await page.evaluate(() => {
-
-                        const video = document.querySelector('video');
-
-                        if (video) {
-
-                            video.play();
-
-                        }
-
-                    });
-
-                }
-
-                await page.screenshot({
-
-                    path: 'live-proof.png'
-
-                });
-
-                console.log('Screenshot updated: live-proof.png');
+                console.log('Heartbeat:', latestStatus);
 
                 await page.waitForTimeout(60000);
 
@@ -126,11 +122,7 @@ async function startPlayer() {
 
         } catch (err) {
 
-            console.log('====================================');
-            console.log('ERROR OCCURRED');
-            console.log(err.message);
-            console.log('Restarting in 5 seconds...');
-            console.log('====================================');
+            console.log('Restarting:', err.message);
 
             try {
 
@@ -142,7 +134,7 @@ async function startPlayer() {
 
             } catch (e) {}
 
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            await new Promise(r => setTimeout(r, 5000));
 
         }
 
